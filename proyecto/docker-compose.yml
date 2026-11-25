@@ -1,0 +1,239 @@
+services:
+
+  # =========================
+  # POSTGRES
+  # =========================
+  postgres:
+    image: postgres:15.6
+    container_name: restaurant-db
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "${POSTGRES_EXTERNAL_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =========================
+  # CONFIG SERVERS
+  # =========================
+  mongo-config1:
+    image: mongo:7
+    container_name: mongo-config1
+    command: mongod --configsvr --replSet configReplSet --port 27019 --bind_ip_all --quiet
+    volumes:
+      - config1_data:/data/db
+
+  mongo-config2:
+    image: mongo:7
+    container_name: mongo-config2
+    command: mongod --configsvr --replSet configReplSet --port 27019 --bind_ip_all --quiet
+    volumes:
+      - config2_data:/data/db
+
+  mongo-config3:
+    image: mongo:7
+    container_name: mongo-config3
+    command: mongod --configsvr --replSet configReplSet --port 27019 --bind_ip_all --quiet
+    volumes:
+      - config3_data:/data/db
+
+  # =========================
+  # SHARD 1
+  # =========================
+  mongo-shard1-a:
+    image: mongo:7
+    container_name: mongo-shard1-a
+    command: mongod --shardsvr --replSet shard1ReplSet --port 27018 --bind_ip_all --quiet
+    volumes:
+      - shard1a_data:/data/db
+
+  mongo-shard1-b:
+    image: mongo:7
+    container_name: mongo-shard1-b
+    command: mongod --shardsvr --replSet shard1ReplSet --port 27018 --bind_ip_all --quiet
+    volumes:
+      - shard1b_data:/data/db
+
+  mongo-shard1-c:
+    image: mongo:7
+    container_name: mongo-shard1-c
+    command: mongod --shardsvr --replSet shard1ReplSet --port 27018 --bind_ip_all --quiet
+    volumes:
+      - shard1c_data:/data/db
+
+  # =========================
+  # ROUTER (mongos)
+  # =========================
+  mongo-router:
+    image: mongo:7
+    container_name: mongo-router
+    command: mongos --configdb configReplSet/mongo-config1:27019,mongo-config2:27019,mongo-config3:27019 --port 27017 --bind_ip_all --quiet
+    ports:
+      - "27017:27017"
+    depends_on:
+      - mongo-config1
+      - mongo-config2
+      - mongo-config3
+      - mongo-shard1-a
+      - mongo-shard1-b
+      - mongo-shard1-c
+
+  # =========================
+  # INIT MONGO (corre una sola vez)
+  # =========================
+  mongo-init:
+    image: mongo:7
+    container_name: mongo-init
+    depends_on:
+      - mongo-router
+    restart: "no"
+    volumes:
+      - ./mongo/init.sh:/init.sh:ro
+    entrypoint: ["sh", "-c", "cp /init.sh /tmp/init.sh && sed -i 's/\\r//' /tmp/init.sh && bash /tmp/init.sh"]
+
+  # =========================
+  # KEYCLOAK
+  # =========================
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.5.5
+    container_name: keycloak
+    command: start-dev --import-realm --hostname=localhost --hostname-strict=false
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+    ports:
+      - "${KEYCLOAK_PORT}:8080"
+    volumes:
+      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json
+
+  # =========================
+  # REDIS (CACHE)
+  # =========================
+  redis:
+    image: redis:7-alpine
+    container_name: redis-cache
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: always
+
+  # =========================
+  # API
+  # =========================
+  api:
+    #image: ghcr.io/${GITHUB_REPOSITORY}/api:latest
+    build: ./microservices/api
+    #container_name: restaurant-api
+    #deploy:
+    #  replicas: ${API_REPLICAS:-3}
+    restart: always
+    env_file:
+      - .env
+    environment:
+      DB_HOST: postgres
+      DB_TYPE: ${DB_TYPE}
+      KEYCLOAK_URL: http://host.docker.internal:8080
+      MONGO_URI: mongodb://mongo-router:27017
+      MONGO_DB_NAME: ${MONGO_DB_NAME}
+      REDIS_URL: redis://redis:6379
+      DEBUG: keycloak:*
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongo-init:
+        condition: service_completed_successfully
+      keycloak:
+        condition: service_started
+      redis:
+        condition: service_started
+    volumes:
+      - ./microservices/api:/app
+      - /app/node_modules
+
+  # =========================
+  # ELASTICSEARCH
+  # =========================
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+    volumes:
+      - elastic_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  # =========================
+  # SEARCH SERVICE
+  # =========================
+  search-service:
+    #image: ghcr.io/${GITHUB_REPOSITORY}/search:latest
+    build: ./microservices/search
+    #container_name: search-service
+    #deploy:
+    #  replicas: ${SEARCH_REPLICAS:-2}
+    restart: always
+    env_file:
+      - .env
+    environment:
+      KEYCLOAK_URL: http://localhost:8080
+      KEYCLOAK_INTERNAL_URL: http://keycloak:8080
+      ELASTIC_URL: http://elasticsearch:9200
+      SEARCH_PORT: 3001
+      DB_TYPE: ${DB_TYPE}
+      MONGO_URI: mongodb://mongo-router:27017
+      MONGO_DB_NAME: ${MONGO_DB_NAME}
+      DB_HOST: postgres
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./microservices/search:/app
+      - /app/node_modules
+
+  # =========================
+  # NGINX - BALANCEADOR DE CARGA
+  # =========================
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-balancer
+    ports:
+      - "80:80"                          
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api
+      - search-service
+    restart: always
+
+volumes:
+  postgres_data:
+  config1_data:
+  config2_data:
+  config3_data:
+  shard1a_data:
+  shard1b_data:
+  shard1c_data:
+  elastic_data:
+  redis_data:

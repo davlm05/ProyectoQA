@@ -7,7 +7,7 @@ Escuela de Ingeniería en Computación
 Aseguramiento de la Calidad del Software
 
 **Profesor:**
-Kenneth Roberto Obando Rodríguez
+Alicia Marcela Salazar Hernandez
 
 **Estudiantes:** 
 

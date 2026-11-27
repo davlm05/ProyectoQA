@@ -295,4 +295,20 @@ Cada objetivo se redacta con la plantilla de Basili, la cual establece el objeto
 | ¿Puede instalarse el sistema desde cero sin intervención manual? | Tiempo de instalación desde cero hasta que los servicios responden correctamente, y cantidad de pasos manuales requeridos. |
 | ¿Cómo responde el sistema al aumentar la cantidad de réplicas? | Variación del percentil 95 del tiempo de respuesta al duplicar la cantidad de réplicas de los servicios. |
 
+# **HERRAMIENTAS**
+
+| Propósito | Herramienta seleccionada | Modo | Justificación de la selección |
+| ----- | ----- | ----- | ----- |
+| Análisis estático y deuda técnica | SonarQube Community, en contenedor local | Automatizada | Es la única opción de la lista que entrega en un mismo reporte las tres métricas comprometidas en el objetivo de mantenibilidad: complejidad ciclomática, porcentaje de líneas duplicadas y razón de deuda técnica.  |
+| Pruebas unitarias | Jest | Automatizada | Ya está instalado en ambos microservicios, con 41 archivos de prueba existentes y el umbral de cobertura configurado. Adoptarlo tiene costo cero y permite reutilizar los dobles de prueba ya construidos por el equipo de origen. |
+| Pruebas de integración | Testcontainers para Node.js | Automatizada | Levanta instancias reales y desechables de PostgreSQL y MongoDB desde el propio Jest, lo que permite afirmar sobre el estado efectivamente persistido, es decir el efecto de lado que exige el enunciado, sin depender de que el entorno se haya levantado de antemano.  |
+| Pruebas de sistema de punta a punta | Playwright, en modo de peticiones HTTP | Automatizada | El sistema no posee interfaz gráfica, de modo que las pruebas de punta a punta se ejecutan por HTTP contra el balanceador, atravesando Nginx, el microservicio y la base de datos.  |
+| Pruebas de API | Postman con Newman | Automatizada | Postman permite diseñar y documentar los casos funcionales de camino feliz, negativos y de frontera en un formato legible para todo el equipo, y Newman los ejecuta por consola con reporte, de manera que una misma colección sirve como documentación y como suite repetible.  |
+| Rendimiento y carga | k6 | Automatizada | Permite definir la carga creciente por etapas y, sobre todo, declarar los umbrales dentro del propio script, que es exactamente la condición de fijar el umbral de antemano. Entrega el percentil 95 de forma nativa, que es la métrica del objetivo de eficiencia, y sus scripts se escriben en el mismo lenguaje del sistema. |
+| Seguridad | OWASP ZAP en modo pasivo, en contenedor | Automatizada y manual | Se ejecuta como contenedor contra el ambiente propio y produce un reporte de hallazgos clasificados por severidad, que es una de las métricas declaradas. Un escáner pasivo no puede resolver las verificaciones de control de acceso por rol, pues requieren tokens de cada perfil; esas se automatizan en la colección de Postman y se complementan con revisión manual guiada por OWASP Top 10. |
+| Usabilidad y accesibilidad | Lighthouse | Automatizada y manual | Está integrado en el navegador y dispone de interfaz de línea de comandos, por lo que no requiere instalación ni cuenta externa, y genera un reporte de incumplimientos por pantalla. La prueba con personas usuarias es manual por definición. |
+| Cobertura de código | Istanbul | Automatizada | Es el motor de cobertura que Jest utiliza al ejecutarse con la opción correspondiente, y genera los reportes en los formatos que el proyecto ya tiene versionados, por lo que no requiere incorporación alguna. |
+
+
+
 

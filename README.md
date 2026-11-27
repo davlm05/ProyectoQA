@@ -295,6 +295,88 @@ Cada objetivo se redacta con la plantilla de Basili, la cual establece el objeto
 | ¿Puede instalarse el sistema desde cero sin intervención manual? | Tiempo de instalación desde cero hasta que los servicios responden correctamente, y cantidad de pasos manuales requeridos. |
 | ¿Cómo responde el sistema al aumentar la cantidad de réplicas? | Variación del percentil 95 del tiempo de respuesta al duplicar la cantidad de réplicas de los servicios. |
 
+# **FICHAS DE MÉTRICAS SEGÚN ISO/IEC 25023**
+
+## **Cobertura de requerimientos funcionales verificados**
+
+| Campo | Contenido |
+| ----- | ----- |
+| **Característica de ISO/IEC 25010:2023 que mide** | Adecuación funcional, en su subcaracterística de completitud funcional. |
+| **Objetivo de la métrica (pregunta GQM que responde)** | ¿Qué proporción de los requerimientos funcionales cuenta con al menos un caso de prueba aprobado? |
+| **Fórmula** | CRF = (requerimientos funcionales con al menos un caso de prueba aprobado / total de requerimientos funcionales) × 100, sobre un total declarado de 34 requerimientos. |
+| **Unidad de medida y escala** | Porcentaje, escala de razón, rango de 0 a 100. |
+| **Herramienta de medición** | Matriz de trazabilidad del proyecto, alimentada con los reportes de ejecución de Newman, Jest y Playwright. |
+| **Umbral de aceptación** | Mayor o igual al 90 % de los requerimientos funcionales con al menos un caso aprobado. |
+| **Método de recolección** | Se recorre la matriz de trazabilidad y se marca cada requerimiento que tenga al menos un caso con resultado aprobado en los reportes de la corrida. Los casos en estado bloqueado o no ejecutado no cuentan como cobertura. El conteo se realiza sobre el requerimiento, no sobre el caso, de modo que varios casos sobre un mismo requerimiento aportan una sola unidad. |
+| **Frecuencia de medición** | En cada corrida completa de la suite automatizada, con consolidación al cierre de cada ciclo de pruebas. |
+| **Justificación de por qué esta métrica y no otra** | Se elige medir la proporción de requerimientos cubiertos en lugar del porcentaje de casos aprobados porque este último puede ser alto y simultáneamente dejar requerimientos enteros sin probar: basta concentrar muchos casos en pocas operaciones. La métrica elegida acota un universo conocido y finito, los 34 requerimientos declarados en la ficha de identificación, y responde directamente a la pregunta de completitud que la norma asocia a esta característica. |
+| **Umbral de aceptación total, parcial y rechazo** | Total: mayor o igual al 90 %. Parcial: entre el 75 % y el 89 %. Rechazo: menor al 75 %. |
+| **Decisión que cambia según el resultado** | Total: se recomienda la liberación en cuanto a adecuación funcional. Parcial: se recomienda liberar únicamente los módulos con cobertura completa y se condiciona el resto al cierre de los casos pendientes. Rechazo: no se recomienda la liberación y se priorizan los casos de los requerimientos descubiertos antes de cualquier otra actividad. |
+
+## **Tiempo de respuesta en el percentil 95 bajo carga concurrente**
+
+| Campo | Contenido |
+| ----- | ----- |
+| **Característica de ISO/IEC 25010:2023 que mide** | Eficiencia de desempeño, en su subcaracterística de comportamiento temporal. |
+| **Objetivo de la métrica (pregunta GQM que responde)** | ¿Cuánto tarda el sistema en responder bajo una carga concurrente determinada? |
+| **Fórmula** | P95 = valor por debajo del cual se sitúa el 95 % de los tiempos de respuesta observados en la ventana de medición, para las operaciones de consulta de catálogo solicitadas a través del balanceador con 50 usuarias virtuales concurrentes. |
+| **Unidad de medida y escala** | Milisegundos, escala de razón. |
+| **Herramienta de medición** | k6, con los umbrales declarados dentro del propio script. |
+| **Umbral de aceptación** | P95 menor o igual a 800 ms con 50 usuarias virtuales concurrentes. |
+| **Método de recolección** | Ejecución de un script de carga creciente por etapas de 10, 25 y 50 usuarias virtuales sobre `http://localhost`, de modo que el tráfico atraviese Nginx. Se descartan los primeros 30 segundos de cada etapa para no contaminar la medición con el arranque en frío de la caché, y se registra el valor correspondiente a la etapa de 50 usuarias. El escenario se ejecuta tres veces y se reporta la mediana de los tres valores de P95. |
+| **Frecuencia de medición** | Una vez por escenario de rendimiento, con repetición obligatoria ante cualquier cambio en la configuración de caché, de réplicas o del balanceador. |
+| **Justificación de por qué esta métrica y no otra** | Se elige el percentil 95 y no el tiempo promedio porque el promedio oculta la cola de peticiones lentas, que es precisamente donde se manifiesta la saturación de la caché y del balanceador, los dos componentes que esta característica debe evaluar.  |
+| **Umbral de aceptación total, parcial y rechazo** | Total: P95 menor o igual a 800 ms. Parcial: P95 entre 801 ms y 1500 ms. Rechazo: P95 superior a 1500 ms o aparición de errores de servidor durante la etapa de 50 usuarias. |
+| **Decisión que cambia según el resultado** | Total: se mantiene la configuración actual de caché y de réplicas. Parcial: se recomienda ajustar los tiempos de expiración de la caché o aumentar el número de réplicas antes de liberar. Rechazo: se registra un defecto de desempeño y no se recomienda la liberación bajo la carga declarada. |
+
+## **Controles de acceso verificados conformes**
+
+| Campo | Contenido |
+| ----- | ----- |
+| **Característica de ISO/IEC 25010:2023 que mide** | Seguridad, en sus subcaracterísticas de confidencialidad y autenticidad. |
+| **Objetivo de la métrica (pregunta GQM que responde)** | ¿Se restringen las operaciones según el rol de la persona usuaria y se impide el acceso sin un token válido? |
+| **Fórmula** | CAC = (controles de acceso cuyo comportamiento coincide con el especificado / total de controles de acceso verificados) × 100. Cada control corresponde a una combinación de operación protegida y perfil de acceso. |
+| **Unidad de medida y escala** | Porcentaje, escala de razón, rango de 0 a 100. |
+| **Herramienta de medición** | Colección de Postman ejecutada con Newman, utilizando tokens de cada perfil, complementada con OWASP ZAP en modo pasivo para los hallazgos genéricos. |
+| **Umbral de aceptación** | 100 % de los controles verificados con comportamiento conforme. |
+| **Método de recolección** | Para cada operación protegida se ejecutan tres intentos: sin encabezado de autorización, con un token de rol `user` y con un token de rol `admin`. Se considera conforme cuando la respuesta es 401 sin token, 403 cuando el rol es insuficiente para una operación restringida a administración, y una respuesta exitosa cuando el rol corresponde. El resultado se registra por combinación, no por operación. |
+| **Frecuencia de medición** | Una vez por ciclo completo de pruebas y de forma obligatoria tras cualquier modificación de los middlewares de autenticación o de autorización. |
+| **Justificación de por qué esta métrica y no otra** | Se elige la proporción de controles conformes en lugar de la cantidad de vulnerabilidades detectadas porque esta última depende de la capacidad del escáner utilizado y no acota un universo: no permite afirmar cuánto quedó sin revisar. La métrica elegida se calcula sobre una población conocida y finita, las operaciones protegidas multiplicadas por los perfiles, lo que la hace exhaustiva y reproducible.  |
+| **Umbral de aceptación total, parcial y rechazo** | Total: 100 %. Parcial: entre el 95 % y el 99,9 %, siempre que ningún incumplimiento permita acceder a datos de otra persona usuaria. Rechazo: menos del 95 %, o cualquier incumplimiento que exponga o permita modificar datos ajenos, con independencia del porcentaje. |
+| **Decisión que cambia según el resultado** | Total: se recomienda la liberación en cuanto a control de acceso. Parcial: se registra un defecto de severidad alta y la liberación queda condicionada a su corrección. Rechazo: se registra un defecto de severidad crítica, se detiene la evaluación de las demás características y la corrección se atiende antes de cualquier otra actividad. |
+
+## **Razón de deuda técnica**
+
+| Campo | Contenido |
+| ----- | ----- |
+| **Característica de ISO/IEC 25010:2023 que mide** | Mantenibilidad, en sus subcaracterísticas de analizabilidad y modificabilidad. |
+| **Objetivo de la métrica (pregunta GQM que responde)** | ¿Cuánta deuda técnica acumula el sistema? |
+| **Fórmula** | RDT = (esfuerzo estimado de remediación / esfuerzo estimado de desarrollo) × 100, donde el esfuerzo de desarrollo se estima a partir del tamaño del código según la configuración de la herramienta de análisis. |
+| **Unidad de medida y escala** | Porcentaje, escala de razón. |
+| **Herramienta de medición** | SonarQube Community, ejecutado como instancia local en contenedor. |
+| **Umbral de aceptación** | Razón de deuda técnica menor o igual al 5 %, equivalente a la calificación de mantenibilidad más alta de la herramienta. |
+| **Método de recolección** | Análisis estático sobre `microservices/api/src` y `microservices/search/src`, excluyendo `node_modules`, los reportes de cobertura versionados y los archivos de prueba, de modo que la deuda se atribuya al código de producción. Se toma una medición de línea base al inicio de la auditoría y se reporta el valor por microservicio además del consolidado. |
+| **Frecuencia de medición** | Una medición de línea base y una medición de cierre, para evidenciar la variación durante el periodo auditado. |
+| **Justificación de por qué esta métrica y no otra** | Se elige la razón de deuda técnica en lugar de la complejidad ciclomática porque la complejidad describe funciones individuales y no permite emitir un juicio sobre el sistema completo, mientras que la razón expresa el esfuerzo de corrección en proporción al tamaño del código, lo que la hace comparable entre los dos microservicios y traducible de forma directa a la propuesta priorizada de pago que exige la evaluación de deuda técnica. La complejidad ciclomática y el porcentaje de líneas duplicadas se conservan como métricas de apoyo para localizar dónde se concentra la deuda. |
+| **Umbral de aceptación total, parcial y rechazo** | Total: menor o igual al 5 %. Parcial: mayor al 5 % y menor o igual al 10 %. Rechazo: mayor al 10 %. |
+| **Decisión que cambia según el resultado** | Total: se documenta el resultado sin exigir acción correctiva. Parcial: se entrega una propuesta priorizada de pago de deuda como recomendación no bloqueante para la liberación. Rechazo: se recomienda refactorizar los componentes que concentran la deuda antes de incorporar nuevas funcionalidades al sistema. |
+
+## **Equivalencia funcional entre motores de base de datos**
+
+| Campo | Contenido |
+| ----- | ----- |
+| **Característica de ISO/IEC 25010:2023 que mide** | Flexibilidad, en sus subcaracterísticas de adaptabilidad y reemplazabilidad. |
+| **Objetivo de la métrica (pregunta GQM que responde)** | ¿Se mantiene el comportamiento funcional al cambiar el motor de base de datos? |
+| **Fórmula** | EQM = (casos funcionales con resultado equivalente en ambos motores / casos funcionales ejecutados en ambos motores) × 100. |
+| **Unidad de medida y escala** | Porcentaje, escala de razón, rango de 0 a 100. |
+| **Herramienta de medición** | La misma colección de Postman ejecutada con Newman dos veces, una por motor, con comparación de los reportes resultantes. |
+| **Umbral de aceptación** | Mayor o igual al 95 % de los casos con resultado equivalente entre PostgreSQL y MongoDB. |
+| **Método de recolección** | Se levanta el ambiente con `DB_TYPE=postgres`, se ejecuta la colección completa y se archiva el reporte. Se reinicia el ambiente con `DB_TYPE=mongo` y se repite la ejecución. La comparación evalúa el código de estado y el contenido semántico de la respuesta, normalizando previamente los identificadores, dado que PostgreSQL emite enteros secuenciales y MongoDB identificadores de objeto, y los nombres de campo que difieren por efecto del modelo de datos. Se considera equivalente el caso que coincide en código de estado y en el conjunto de datos devuelto una vez aplicada esa normalización. |
+| **Frecuencia de medición** | Una vez por ciclo de pruebas, y de forma obligatoria ante cualquier cambio en la capa de acceso a datos. |
+| **Justificación de por qué esta métrica y no otra** | Se elige la equivalencia observable entre motores en lugar del tiempo de instalación desde cero porque la intercambiabilidad sin modificar el código fuente es el requerimiento no funcional declarado de forma explícita en el enunciado de origen del sistema, y es el que concentra el mayor riesgo: los dos modelos de datos no son equivalentes entre sí, pues los productos existen como tabla independiente en el modelo relacional y de forma embebida en el de documentos. Una métrica de instalabilidad no detectaría esa divergencia. El tiempo de instalación y la degradación al duplicar réplicas se conservan como métricas de apoyo. |
+| **Umbral de aceptación total, parcial y rechazo** | Total: mayor o igual al 95 %. Parcial: entre el 85 % y el 94 %. Rechazo: menor al 85 %. |
+| **Decisión que cambia según el resultado** | Total: se confirma que la intercambiabilidad declarada por el sistema se cumple. Parcial: se registra un defecto por cada divergencia y se recomienda liberar únicamente con el motor que sí satisface los casos. Rechazo: se declara incumplido el requerimiento de compatibilidad dual y se reporta como hallazgo principal de esta característica. |
+
 # **HERRAMIENTAS**
 
 | Propósito | Herramienta seleccionada | Modo | Justificación de la selección |
